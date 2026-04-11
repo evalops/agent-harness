@@ -37,9 +37,9 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/haasonsaas/agent-harness"
-Repository = "https://github.com/haasonsaas/agent-harness"
-Issues = "https://github.com/haasonsaas/agent-harness/issues"
+Homepage = "https://github.com/evalops/agent-harness"
+Repository = "https://github.com/evalops/agent-harness"
+Issues = "https://github.com/evalops/agent-harness/issues"
 
 [build-system]
 requires = ["hatchling"]
