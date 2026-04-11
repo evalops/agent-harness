@@ -153,6 +153,34 @@ Tools are automatically:
 - Wrapped for Claude using `@tool` + in-process MCP server
 - Available to both providers without duplication
 
+#### Optional provider: You.com web search
+
+If your agents need live web results, register the built-in You.com adapter as a tool:
+
+```python
+import os
+from agent_harness import AgentHarness, HarnessConfig, register_you_com_search_tool
+
+os.environ["YOUCOM_API_KEY"] = "your_you_com_api_key"
+register_you_com_search_tool(name="you_search")
+
+config = HarnessConfig(
+    system_prompt="Use web search when the user asks for fresh information.",
+    tool_names=["you_search"],
+)
+
+# The tool call shape is:
+# you_search(query: str, num_results: int = 5)
+```
+
+Environment variables:
+- `YOUCOM_API_KEY` (required)
+
+Fallback/error behavior:
+- Missing API key returns a non-fatal setup message (no crash)
+- Network/API failures return a concise error string to the agent
+- Empty result sets return `No web results found.`
+
 ### Configuration
 
 `HarnessConfig` provides unified configuration:
@@ -324,6 +352,14 @@ def register_tool(
 ) -> Callable
 
 def get_registry() -> ToolRegistry
+
+def register_you_com_search_tool(
+    name: str = "you_search",
+    description: str = "Search the web and return summarized results.",
+    api_key_env: str = "YOUCOM_API_KEY",
+    endpoint: str = "https://api.ydc-index.io/search",
+    timeout_sec: float = 20.0,
+) -> str
 ```
 
 ## Implementation Details

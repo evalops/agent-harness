@@ -7,9 +7,13 @@ Uses a unified tool registry to avoid duplicating tool definitions.
 
 import asyncio
 import inspect
+import json
 import logging
 import os
 import threading
+import urllib.error
+import urllib.parse
+import urllib.request
 import uuid
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -261,6 +265,74 @@ def register_tool(name: Optional[str] = None, description: Optional[str] = None)
 def get_registry() -> ToolRegistry:
     """Get the global tool registry"""
     return _global_registry
+
+
+def register_you_com_search_tool(
+    name: str = "you_search",
+    description: str = "Search the web and return summarized results.",
+    api_key_env: str = "YOUCOM_API_KEY",
+    endpoint: str = "https://api.ydc-index.io/search",
+    timeout_sec: float = 20.0,
+) -> str:
+    """
+    Register a You.com web-search tool in the global registry.
+
+    The registered tool accepts:
+      - query: str (required)
+      - num_results: int = 5
+
+    Returns the registered tool name.
+    """
+
+    def _you_search(query: str, num_results: int = 5) -> str:
+        api_key = os.getenv(api_key_env)
+        if not api_key:
+            return (
+                f"You.com search is not configured. Set {api_key_env} and retry. "
+                "Returning no web results."
+            )
+
+        if not query.strip():
+            return "You.com search query is empty."
+
+        url = endpoint + "?" + urllib.parse.urlencode({"query": query, "num_web_results": num_results})
+        request = urllib.request.Request(
+            url,
+            headers={
+                "X-API-Key": api_key,
+                "Accept": "application/json",
+                "User-Agent": "agent-harness-you-search/1.0",
+            },
+            method="GET",
+        )
+
+        try:
+            with urllib.request.urlopen(request, timeout=timeout_sec) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+        except (urllib.error.HTTPError, urllib.error.URLError, json.JSONDecodeError, OSError) as exc:
+            return f"You.com search request failed ({type(exc).__name__}): {exc}"
+
+        hits = payload.get("hits") or payload.get("results") or []
+        if not hits:
+            return "No web results found."
+
+        lines = []
+        for idx, hit in enumerate(hits[: max(1, min(num_results, 10))], start=1):
+            title = hit.get("title") or "Untitled"
+            link = hit.get("url") or hit.get("link") or ""
+            snippet = hit.get("snippet") or hit.get("description") or ""
+            snippet = " ".join(snippet.split())
+            line = f"{idx}. {title}"
+            if link:
+                line += f"\n   {link}"
+            if snippet:
+                line += f"\n   {snippet[:220]}"
+            lines.append(line)
+
+        return "\n".join(lines)
+
+    get_registry().register(name=name, description=description, callable=_you_search)
+    return name
 
 
 @dataclass
