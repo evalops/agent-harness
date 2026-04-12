@@ -24,13 +24,16 @@ def test_you_search_tool_formats_results(monkeypatch):
     class FakeResponse:
         def __enter__(self):
             payload = {
-                "hits": [
-                    {
-                        "title": "Agent blog",
-                        "url": "https://example.com/agent",
-                        "snippet": "Useful update.",
-                    }
-                ]
+                "results": {
+                    "web": [
+                        {
+                            "title": "Agent blog",
+                            "url": "https://example.com/agent",
+                            "description": "Generic page summary.",
+                            "snippets": ["Useful update.", "Fresh context."],
+                        }
+                    ]
+                }
             }
             self._buf = io.BytesIO(json.dumps(payload).encode("utf-8"))
             return self
@@ -49,3 +52,5 @@ def test_you_search_tool_formats_results(monkeypatch):
     result = tool.callable("agent tooling", num_results=1)
     assert "1. Agent blog" in result
     assert "https://example.com/agent" in result
+    assert "Useful update. Fresh context." in result
+    assert "Generic page summary." not in result

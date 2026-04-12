@@ -312,7 +312,16 @@ def register_you_com_search_tool(
         except (urllib.error.HTTPError, urllib.error.URLError, json.JSONDecodeError, OSError) as exc:
             return f"You.com search request failed ({type(exc).__name__}): {exc}"
 
-        hits = payload.get("hits") or payload.get("results") or []
+        results = payload.get("results")
+        if isinstance(results, dict):
+            hits = results.get("web") or []
+        elif isinstance(results, list):
+            hits = results
+        else:
+            hits = payload.get("hits") or []
+
+        if not isinstance(hits, list):
+            return "No web results found."
         if not hits:
             return "No web results found."
 
@@ -320,7 +329,11 @@ def register_you_com_search_tool(
         for idx, hit in enumerate(hits[: max(1, min(num_results, 10))], start=1):
             title = hit.get("title") or "Untitled"
             link = hit.get("url") or hit.get("link") or ""
-            snippet = hit.get("snippet") or hit.get("description") or ""
+            snippets = hit.get("snippets")
+            if isinstance(snippets, list):
+                snippet = " ".join(str(item) for item in snippets if item)
+            else:
+                snippet = hit.get("snippet") or hit.get("description") or ""
             snippet = " ".join(snippet.split())
             line = f"{idx}. {title}"
             if link:
