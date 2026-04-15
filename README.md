@@ -161,7 +161,7 @@ If your agents need live web results, register the built-in You.com adapter as a
 import os
 from agent_harness import AgentHarness, HarnessConfig, register_you_com_search_tool
 
-os.environ["YOUCOM_API_KEY"] = "your_you_com_api_key"
+os.environ["YDC_API_KEY"] = "your_ydc_api_key"
 register_you_com_search_tool(name="you_search")
 
 config = HarnessConfig(
@@ -174,7 +174,8 @@ config = HarnessConfig(
 ```
 
 Environment variables:
-- `YOUCOM_API_KEY` (required)
+- `YDC_API_KEY` (required, recommended)
+- `YOUCOM_API_KEY` (legacy alias supported for compatibility)
 
 Fallback/error behavior:
 - Missing API key returns a non-fatal setup message (no crash)
@@ -356,8 +357,8 @@ def get_registry() -> ToolRegistry
 def register_you_com_search_tool(
     name: str = "you_search",
     description: str = "Search the web and return summarized results.",
-    api_key_env: str = "YOUCOM_API_KEY",
-    endpoint: str = "https://api.ydc-index.io/search",
+    api_key_env: str = "YDC_API_KEY",
+    endpoint: str = "https://ydc-index.io/v1/search",
     timeout_sec: float = 20.0,
 ) -> str
 ```
