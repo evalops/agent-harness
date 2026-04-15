@@ -270,8 +270,8 @@ def get_registry() -> ToolRegistry:
 def register_you_com_search_tool(
     name: str = "you_search",
     description: str = "Search the web and return summarized results.",
-    api_key_env: str = "YOUCOM_API_KEY",
-    endpoint: str = "https://api.ydc-index.io/search",
+    api_key_env: str = "YDC_API_KEY",
+    endpoint: str = "https://ydc-index.io/v1/search",
     timeout_sec: float = 20.0,
 ) -> str:
     """
@@ -285,7 +285,7 @@ def register_you_com_search_tool(
     """
 
     def _you_search(query: str, num_results: int = 5) -> str:
-        api_key = os.getenv(api_key_env)
+        api_key = os.getenv(api_key_env) or (os.getenv("YOUCOM_API_KEY") if api_key_env == "YDC_API_KEY" else None)
         if not api_key:
             return (
                 f"You.com search is not configured. Set {api_key_env} and retry. "
@@ -295,7 +295,7 @@ def register_you_com_search_tool(
         if not query.strip():
             return "You.com search query is empty."
 
-        url = endpoint + "?" + urllib.parse.urlencode({"query": query, "num_web_results": num_results})
+        url = endpoint + "?" + urllib.parse.urlencode({"query": query, "count": max(1, min(num_results, 100))})
         request = urllib.request.Request(
             url,
             headers={
