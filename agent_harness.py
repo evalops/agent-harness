@@ -285,7 +285,9 @@ def register_you_com_search_tool(
     """
 
     def _you_search(query: str, num_results: int = 5) -> str:
-        api_key = os.getenv(api_key_env) or (os.getenv("YOUCOM_API_KEY") if api_key_env == "YDC_API_KEY" else None)
+        api_key = os.getenv(api_key_env) or (
+            os.getenv("YOUCOM_API_KEY") if api_key_env == "YDC_API_KEY" else None
+        )
         if not api_key:
             return (
                 f"You.com search is not configured. Set {api_key_env} and retry. "
@@ -295,7 +297,8 @@ def register_you_com_search_tool(
         if not query.strip():
             return "You.com search query is empty."
 
-        url = endpoint + "?" + urllib.parse.urlencode({"query": query, "count": max(1, min(num_results, 100))})
+        requested_count = max(1, min(num_results, 10))
+        url = endpoint + "?" + urllib.parse.urlencode({"query": query, "count": requested_count})
         request = urllib.request.Request(
             url,
             headers={
@@ -309,7 +312,12 @@ def register_you_com_search_tool(
         try:
             with urllib.request.urlopen(request, timeout=timeout_sec) as response:
                 payload = json.loads(response.read().decode("utf-8"))
-        except (urllib.error.HTTPError, urllib.error.URLError, json.JSONDecodeError, OSError) as exc:
+        except (
+            urllib.error.HTTPError,
+            urllib.error.URLError,
+            json.JSONDecodeError,
+            OSError,
+        ) as exc:
             return f"You.com search request failed ({type(exc).__name__}): {exc}"
 
         results = payload.get("results")
@@ -326,7 +334,7 @@ def register_you_com_search_tool(
             return "No web results found."
 
         lines = []
-        for idx, hit in enumerate(hits[: max(1, min(num_results, 10))], start=1):
+        for idx, hit in enumerate(hits[:requested_count], start=1):
             title = hit.get("title") or "Untitled"
             link = hit.get("url") or hit.get("link") or ""
             snippets = hit.get("snippets")
