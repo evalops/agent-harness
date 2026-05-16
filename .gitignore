@@ -50,3 +50,6 @@ claude-agent-sdk-python/
 .pytest_cache/
 .coverage
 htmlcov/
+
+# Bazel
+/bazel-*
