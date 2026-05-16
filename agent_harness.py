@@ -11,6 +11,7 @@ import json
 import logging
 import os
 import threading
+import types
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -19,9 +20,12 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, AsyncIterator, Callable, Optional, Union, get_args, get_origin
+from typing import Any, AsyncIterator, Callable, Literal, Optional, Union, get_args, get_origin
 
 logger = logging.getLogger(__name__)
+_UNION_ORIGINS = (Union,)
+if hasattr(types, "UnionType"):
+    _UNION_ORIGINS = (Union, types.UnionType)
 
 
 class ProviderType(Enum):
@@ -82,14 +86,26 @@ def python_type_to_json_schema(param_type: type) -> dict:
     """
     origin = get_origin(param_type)
 
+    if param_type is None or param_type is type(None):
+        return {"type": "null"}
+
+    if origin is Literal:
+        values = list(get_args(param_type))
+        schema: dict[str, Any] = {"enum": values}
+        value_types = {type(value) for value in values if value is not None}
+        if len(value_types) == 1:
+            schema.update(python_type_to_json_schema(next(iter(value_types))))
+        return schema
+
     # Handle Optional[T] -> Union[T, None]
-    if origin is Union:
+    if origin in _UNION_ORIGINS:
         args = get_args(param_type)
         non_none_args = [arg for arg in args if arg is not type(None)]
+        if not non_none_args:
+            return {"type": "null"}
         if len(non_none_args) == 1:
             return python_type_to_json_schema(non_none_args[0])
-        # Multiple types (not Optional) - use first for now
-        return python_type_to_json_schema(non_none_args[0])
+        return {"anyOf": [python_type_to_json_schema(arg) for arg in non_none_args]}
 
     # Handle List[T]
     if origin is list:
@@ -387,6 +403,15 @@ class HarnessConfig:
 
         if self.retry_attempts < 0:
             raise ValueError("retry_attempts must be non-negative")
+
+        if self.retry_backoff <= 0:
+            raise ValueError("retry_backoff must be positive")
+
+        if self.max_output_tokens is not None and self.max_output_tokens <= 0:
+            raise ValueError("max_output_tokens must be positive")
+
+        if self.top_p is not None and not (0.0 <= self.top_p <= 1.0):
+            raise ValueError("top_p must be between 0.0 and 1.0")
 
         if not self.request_id:
             self.request_id = str(uuid.uuid4())

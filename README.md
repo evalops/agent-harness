@@ -1,474 +1,188 @@
-# Agent Harness - Unified OpenAI & Anthropic SDK Interface
+# Agent Harness
 
-[![CI](https://github.com/evalops/agent-harness/workflows/CI/badge.svg)](https://github.com/evalops/agent-harness/actions)
+Agent Harness is a small Python adapter for running the same tool registry through
+OpenAI Agents SDK or Anthropic Claude Agent SDK provider implementations. The core package
+has no runtime SDK dependency; provider SDKs are imported lazily only when that provider is
+used.
+
+[![CI](https://github.com/evalops/agent-harness/actions/workflows/ci.yml/badge.svg)](https://github.com/evalops/agent-harness/actions/workflows/ci.yml)
+[![Bazel RBE](https://github.com/evalops/agent-harness/actions/workflows/bazel-rbe.yml/badge.svg)](https://github.com/evalops/agent-harness/actions/workflows/bazel-rbe.yml)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A production-ready harness for **hot-swapping** between OpenAI Agents SDK and Anthropic Claude Agent SDK with a unified tool registry and common API.
+## What It Provides
 
-## Key Features
+- A thread-safe global tool registry via `@register_tool`.
+- JSON Schema generation from Python type hints, including `Optional`, `T | None`,
+  `list[T]`, `dict`, `Literal`, and multi-type unions.
+- A common `HarnessConfig` and `AgentResponse` shape across providers.
+- Lazy OpenAI and Claude provider adapters.
+- Provider comparison helpers for running the same prompt against multiple adapters.
+- A built-in optional You.com search tool adapter.
 
-✅ **Unified Tool Registry** - Register tools once, use with any provider  
-✅ **Hot-Swapping** - Switch providers at runtime without code changes  
-✅ **Lazy Loading** - SDKs imported only when needed  
-✅ **Streaming Support** - Real-time response streaming with consistent deltas  
-✅ **Provider Comparison** - Run same prompt on multiple providers in parallel  
-✅ **Type-Safe** - Full type hints and automatic JSON Schema generation  
-✅ **Production-Ready** - Error handling, retries, timeouts, structured logging  
-✅ **Resource Management** - Async context managers and proper cleanup  
-✅ **Thread-Safe** - Concurrent tool registration and execution  
-✅ **Extensible** - Easy to add new providers  
+The registry and schema generation work without OpenAI or Anthropic packages installed.
+Actual model runs require the provider extras and API credentials.
 
-## Architecture
-
-```
-┌─────────────────────────────────────────┐
-│         AgentHarness                    │
-│  • switch_provider()                    │
-│  • run() / stream()                     │
-│  • compare_providers()                  │
-└─────────────┬───────────────────────────┘
-              │
-       ┌──────┴──────┐
-       │             │
-┌──────▼──────┐ ┌───▼──────────┐
-│BaseHarness  │ │ToolRegistry  │
-│(Abstract)   │ │@register_tool│
-└──────┬──────┘ └──────────────┘
-       │
-  ┌────┴────┐
-  │         │
-┌─▼─────┐ ┌─▼────────┐
-│OpenAI │ │Claude    │
-│Harness│ │Harness   │
-└───┬───┘ └───┬──────┘
-    │         │
-┌───▼───┐ ┌───▼──────┐
-│OpenAI │ │Claude    │
-│Agents │ │Agent SDK │
-│SDK    │ │+ MCP     │
-└───────┘ └──────────┘
-```
-
-## Quick Start
-
-### 1. Installation
+## Install
 
 ```bash
-# Install with optional dependencies
-pip install -e ".[all]"  # Both providers
-pip install -e ".[openai]"  # OpenAI only
-pip install -e ".[anthropic]"  # Claude only
-pip install -e ".[dev]"  # Development tools
-
-# Or install SDKs separately
-pip install openai-agents claude-agent-sdk
+pip install -e .
+pip install -e ".[openai]"
+pip install -e ".[anthropic]"
+pip install -e ".[all]"
+pip install -e ".[dev]"
 ```
 
-### 2. Set API Keys
+Provider credentials:
 
 ```bash
 export OPENAI_API_KEY="sk-..."
 export ANTHROPIC_API_KEY="sk-ant-..."
 ```
 
-### 3. Basic Usage
+## Quick Start
 
 ```python
 import asyncio
+
 from agent_harness import AgentHarness, HarnessConfig, register_tool
 
 
-# Register a tool once - works with both providers
 @register_tool(description="Get weather for a city")
 def get_weather(city: str) -> str:
-    return f"Weather in {city}: sunny, 72°F"
+    return f"Weather in {city}: sunny, 72F"
 
 
-async def main():
+async def main() -> None:
     config = HarnessConfig(
-        system_prompt="You are a helpful assistant",
+        system_prompt="You are a helpful assistant.",
         tool_names=["get_weather"],
         max_turns=5,
-        timeout_sec=30.0
+        timeout_sec=30.0,
     )
-    
-    # Use async context manager for proper cleanup
+
     async with AgentHarness(provider="openai", config=config) as harness:
-        result = await harness.run("What's the weather in Tokyo?")
-        print(f"OpenAI: {result.final_output}")
-        print(f"Latency: {result.latency_ms}ms")
-        
-        # Hot-swap to Claude
+        response = await harness.run("What is the weather in Tokyo?")
+        print(response.final_output)
+
         await harness.switch_provider("claude")
-        result = await harness.run("What's the weather in Tokyo?")
-        print(f"Claude: {result.final_output}")
-        print(f"Latency: {result.latency_ms}ms")
+        response = await harness.run("What is the weather in Tokyo?")
+        print(response.final_output)
 
 
 asyncio.run(main())
 ```
 
-## What's New in v0.2.0
+## Tool Registry
 
-🎉 **Major improvements for production use:**
-
-- **Automatic JSON Schema generation** from Python type hints
-- **Custom error taxonomy** with retryable errors
-- **Structured logging** with request IDs and timing
-- **Request timeouts and retry logic** with exponential backoff
-- **Async context managers** for proper resource cleanup
-- **Thread-safe registry** for concurrent operations
-- **Enhanced configuration** with validation
-- **Comprehensive test suite** with pytest
-- **CI/CD pipeline** with GitHub Actions
-
-See [CHANGELOG.md](CHANGELOG.md) for full details.
-
-## Core Concepts
-
-### Tool Registry
-
-The `@register_tool` decorator adds tools to a global registry accessible by all providers:
+Register a tool once and let each provider adapter wrap it for its SDK:
 
 ```python
-from agent_harness import register_tool
+from typing import Literal
 
-@register_tool(description="Add two numbers")
-def add(a: float, b: float) -> float:
-    """Adds two numbers together"""
-    return a + b
+from agent_harness import get_registry, register_tool
 
-@register_tool(description="Calculate factorial")
-def factorial(n: int) -> int:
-    """Calculate n!"""
-    if n <= 1:
-        return 1
-    return n * factorial(n - 1)
+
+@register_tool(description="Score a deployment risk")
+def score_risk(service: str, mode: Literal["fast", "safe"], retries: int | None = None) -> str:
+    return f"{service}: {mode}, retries={retries}"
+
+
+tool = get_registry().get("score_risk")
+print(tool.json_schema)
 ```
 
-Tools are automatically:
-- Extracted with parameter types via introspection
-- Wrapped for OpenAI using `function_tool`
-- Wrapped for Claude using `@tool` + in-process MCP server
-- Available to both providers without duplication
+Default values are not required in the generated schema. Parameters without annotations are
+treated as strings.
 
-#### Optional provider: You.com web search
-
-If your agents need live web results, register the built-in You.com adapter as a tool:
-
-```python
-import os
-from agent_harness import AgentHarness, HarnessConfig, register_you_com_search_tool
-
-os.environ["YDC_API_KEY"] = "your_ydc_api_key"
-register_you_com_search_tool(name="you_search")
-
-config = HarnessConfig(
-    system_prompt="Use web search when the user asks for fresh information.",
-    tool_names=["you_search"],
-)
-
-# The tool call shape is:
-# you_search(query: str, num_results: int = 5)
-```
-
-Environment variables:
-- `YDC_API_KEY` (required, recommended)
-- `YOUCOM_API_KEY` (legacy alias supported for compatibility)
-
-Fallback/error behavior:
-- Missing API key returns a non-fatal setup message (no crash)
-- Network/API failures return a concise error string to the agent
-- Empty result sets return `No web results found.`
-
-### Configuration
-
-`HarnessConfig` provides unified configuration:
+## Configuration
 
 ```python
 from agent_harness import HarnessConfig
 
 config = HarnessConfig(
-    system_prompt="You are an expert data analyst",
-    model="gpt-4o",                   # Provider-specific model
-    max_turns=10,                     # Max conversation turns
-    temperature=0.7,                  # LLM temperature (0.0-2.0)
-    timeout_sec=30.0,                 # Request timeout
-    max_output_tokens=1000,           # Max output tokens
-    top_p=0.9,                        # Top-p sampling
-    stop_sequences=["STOP"],          # Stop sequences
-    tool_names=["add", "multiply"],   # Specific tools to use
-    retry_attempts=3,                 # Number of retries
-    retry_backoff=1.0,                # Backoff multiplier
-    request_id="custom-id",           # Custom request ID (auto-generated if None)
-    provider_options={                # Provider-specific options
-        "permission_mode": "acceptEdits"  # Claude-specific
-    }
+    system_prompt="You are an expert operator.",
+    model="gpt-4o",
+    max_turns=10,
+    temperature=0.7,
+    timeout_sec=30.0,
+    max_output_tokens=1000,
+    top_p=0.9,
+    stop_sequences=["STOP"],
+    tool_names=["score_risk"],
+    retry_attempts=3,
+    retry_backoff=1.0,
+    request_id="optional-stable-id",
+    provider_options={"permission_mode": "acceptEdits"},
 )
 ```
 
-### Base Harness Interface
+Validation rejects non-positive turns, timeout, retry backoff, and output token limits;
+temperatures outside `0.0..2.0`; `top_p` outside `0.0..1.0`; and negative retry counts.
 
-All providers implement `BaseHarness`:
-
-```python
-class BaseHarness(ABC):
-    @abstractmethod
-    async def run(self, prompt: str) -> AgentResponse:
-        """Run agent and return final response"""
-        pass
-    
-    @abstractmethod
-    async def stream(self, prompt: str) -> AsyncIterator[str]:
-        """Stream responses in real-time"""
-        pass
-```
-
-## Advanced Usage
-
-### Streaming Responses
+## Optional You.com Search Tool
 
 ```python
-harness = AgentHarness(provider="openai", config=config)
+import os
 
-async for chunk in harness.stream("Write a story about AI"):
-    print(chunk, end="", flush=True)
-```
+from agent_harness import HarnessConfig, register_you_com_search_tool
 
-### Provider Comparison
+os.environ["YDC_API_KEY"] = "your_ydc_api_key"
+register_you_com_search_tool(name="you_search")
 
-Compare both providers side-by-side:
-
-```python
-results = await harness.compare_providers(
-    "Explain quantum computing in simple terms"
-)
-
-for provider, response in results.items():
-    print(f"\n{provider.upper()}:")
-    print(response.final_output)
-```
-
-### Dynamic Tool Registration
-
-Register tools at runtime:
-
-```python
-from agent_harness import register_tool, get_registry
-
-@register_tool(description="Convert miles to kilometers")
-def miles_to_km(miles: float) -> float:
-    return miles * 1.60934
-
-print(f"Registered: {list(get_registry().get_all().keys())}")
-```
-
-### Provider-Specific Features
-
-#### OpenAI: Guardrails & Handoffs
-
-```python
 config = HarnessConfig(
-    system_prompt="You are an assistant",
-    provider_options={
-        "guardrails": [my_guardrail],
-        "handoffs": [other_agent]
-    }
+    system_prompt="Use web search when fresh context matters.",
+    tool_names=["you_search"],
 )
 ```
 
-#### Claude: MCP Servers & Hooks
+The adapter is intentionally non-fatal:
 
-```python
-config = HarnessConfig(
-    system_prompt="You are a coding assistant",
-    provider_options={
-        "allowed_tools": ["Read", "Write", "Bash"],
-        "permission_mode": "acceptEdits",
-        "cwd": "/path/to/project",
-        "hooks": {
-            "PreToolUse": [check_bash_hook]
-        }
-    }
-)
-```
+- Missing API key returns a setup message to the agent.
+- HTTP or JSON failures return a concise error string.
+- Empty result sets return `No web results found.`
 
-## API Reference
+## Provider Notes
 
-### AgentHarness
+OpenAI provider:
 
-Main class for hot-swapping providers.
+- Installs through `.[openai]`.
+- Lazily imports `agents`.
+- Wraps registered tools with `function_tool`.
+- Runs through `Runner.run()` and streams through `Runner.run_streamed()`.
 
-```python
-class AgentHarness:
-    def __init__(
-        self,
-        provider: str = "openai",
-        config: Optional[HarnessConfig] = None,
-        api_key: Optional[str] = None
-    )
-    
-    def switch_provider(self, provider: str) -> None
-    async def run(self, prompt: str) -> AgentResponse
-    async def stream(self, prompt: str) -> AsyncIterator[str]
-    async def compare_providers(
-        self,
-        prompt: str,
-        providers: Optional[list[str]] = None
-    ) -> dict[str, AgentResponse]
-```
+Claude provider:
 
-**Providers:** `"openai"`, `"claude"`, `"anthropic"`
+- Installs through `.[anthropic]`.
+- Lazily imports `claude_agent_sdk`.
+- Exposes registered tools through an in-process MCP server.
+- Accepts Claude-specific options through `provider_options`.
 
-### HarnessConfig
-
-```python
-@dataclass
-class HarnessConfig:
-    system_prompt: str = "You are a helpful assistant."
-    model: Optional[str] = None
-    max_turns: int = 10
-    temperature: float = 1.0
-    tool_names: Optional[list[str]] = None
-    provider_options: dict[str, Any] = field(default_factory=dict)
-```
-
-### AgentResponse
-
-```python
-@dataclass
-class AgentResponse:
-    final_output: str
-    messages: list[Any] = field(default_factory=list)
-    metadata: dict[str, Any] = field(default_factory=dict)
-```
-
-### Tool Registry
-
-```python
-def register_tool(
-    name: Optional[str] = None,
-    description: Optional[str] = None
-) -> Callable
-
-def get_registry() -> ToolRegistry
-
-def register_you_com_search_tool(
-    name: str = "you_search",
-    description: str = "Search the web and return summarized results.",
-    api_key_env: str = "YDC_API_KEY",
-    endpoint: str = "https://ydc-index.io/v1/search",
-    timeout_sec: float = 20.0,
-) -> str
-```
-
-## Implementation Details
-
-### OpenAI Harness
-
-- Lazily imports `agents` module
-- Wraps tools using `function_tool` decorator
-- Creates `Agent` with `model_config`
-- Uses `Runner.run()` for execution
-- Streams via `Runner.run_streamed()`
-
-### Claude Harness
-
-- Lazily imports `claude_agent_sdk`
-- Wraps tools with `@tool` decorator
-- Creates in-process MCP server via `create_sdk_mcp_server()`
-- Uses `ClaudeAgentOptions` for configuration
-- Executes via `query()` or `ClaudeSDKClient`
-- Extracts `TextBlock` content from responses
-
-## Examples
-
-See [example_usage.py](example_usage.py) for comprehensive examples:
-
-- ✅ Basic hot-swapping
-- ✅ Tool usage with both providers
-- ✅ Streaming responses
-- ✅ Provider comparison
-- ✅ Dynamic tool registration
-- ✅ Provider-specific options
-
-Run examples:
+## Development
 
 ```bash
-python example_usage.py
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"
+python3 -m pytest -q
+make bazel-check
 ```
 
-## Design Principles
-
-1. **Single Responsibility**: Each provider adapter handles only its SDK
-2. **Lazy Loading**: SDKs imported only when provider is selected
-3. **Don't Repeat Yourself**: Tools registered once, used everywhere
-4. **Open/Closed**: Easy to add new providers by extending `BaseHarness`
-5. **Dependency Inversion**: Code depends on `BaseHarness` abstraction
-
-## Comparison: OpenAI vs Claude
-
-| Feature | OpenAI Agents SDK | Claude Agent SDK |
-|---------|------------------|------------------|
-| **Release** | March 2025 | 2025 |
-| **Core API** | Responses API | Model Context Protocol (MCP) |
-| **Tool Format** | `function_tool` decorator | `@tool` + MCP server |
-| **Streaming** | `run_streamed()` | `query()` iterator |
-| **Built-in Tools** | Web search, file search, code interpreter | Read, Write, Bash, etc. |
-| **Handoffs** | Native support | Programmatic subagents |
-| **Guardrails** | Built-in | Hooks (PreToolUse, PostToolUse) |
-| **Sessions** | SQLite, Redis | Session forking |
-
-## Extending the Harness
-
-To add a new provider:
-
-```python
-class MyProviderHarness(BaseHarness):
-    async def run(self, prompt: str) -> AgentResponse:
-        # Import SDK lazily
-        from my_sdk import Agent
-        
-        # Get registered tools
-        tools = self._get_registered_tools()
-        
-        # Wrap and execute
-        # ...
-        
-        return AgentResponse(...)
-    
-    async def stream(self, prompt: str) -> AsyncIterator[str]:
-        # Implement streaming
-        # ...
-
-# Register in AgentHarness.PROVIDERS
-AgentHarness.PROVIDERS["myprovider"] = MyProviderHarness
-```
-
-## Testing
+Remote execution smoke:
 
 ```bash
-# Run examples
-python example_usage.py
-
-# Test with both providers
-export OPENAI_API_KEY="sk-..."
-export ANTHROPIC_API_KEY="sk-ant-..."
-python example_usage.py
+make bazel-rbe-smoke
 ```
 
-## Repository Structure
+The `Bazel RBE` GitHub Actions workflow runs on the EvalOps `bazel-rbe-dev` farm when
+`BAZEL_RBE_ENABLED=true` is set for the repository. It uses the
+`evalops-agent-harness-rbe` and `bazel-rbe` self-hosted labels.
 
+## Repository Layout
+
+```text
+agent_harness.py          core registry, config, provider adapters
+tests/                    pytest coverage
+example_usage.py          provider examples
+BUILD.bazel               Bazel pytest target
+MODULE.bazel              Bazel module dependencies
 ```
-agent_sdk/
-├── agent_harness.py              # Core harness implementation
-├── example_usage.py              # Comprehensive examples
-├── README.md                     # This file
-├── openai-agents-python/         # OpenAI SDK (cloned)
-└── claude-agent-sdk-python/      # Claude SDK (cloned)
-```
-
-## License
-
-MIT
