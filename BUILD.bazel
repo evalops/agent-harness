@@ -1,0 +1,21 @@
+load("@pypi//:requirements.bzl", "requirement")
+load("@rules_python//python:defs.bzl", "py_library", "py_test")
+
+py_library(
+    name = "agent_harness",
+    srcs = ["agent_harness.py"],
+    imports = ["."],
+    visibility = ["//visibility:public"],
+)
+
+py_test(
+    name = "pytest",
+    srcs = glob(["tests/**/*.py"]),
+    data = ["pyproject.toml"],
+    main = "tests/pytest_main.py",
+    deps = [
+        ":agent_harness",
+        requirement("pytest"),
+        requirement("pytest-asyncio"),
+    ],
+)

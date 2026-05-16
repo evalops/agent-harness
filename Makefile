@@ -1,4 +1,4 @@
-.PHONY: help install install-dev test lint format type-check clean
+.PHONY: help install install-dev test lint format type-check requirements-lock bazel-format bazel-mod-tidy bazel-check bazel-test bazel-test-remote bazel-rbe-smoke clean
 
 help:
 	@echo "Agent Harness Development Commands"
@@ -40,6 +40,26 @@ format-check:
 
 type-check:
 	mypy agent_harness.py
+
+requirements-lock:
+	uv pip compile pyproject.toml --extra dev -o requirements_lock.txt
+
+bazel-format:
+	buildifier BUILD.bazel bazel/platforms/BUILD.bazel
+
+bazel-mod-tidy:
+	bazelisk mod tidy
+
+bazel-test:
+	bazelisk test //:pytest
+
+bazel-test-remote:
+	bazelisk test //:pytest --config=remote-gcp-dev
+
+bazel-rbe-smoke:
+	scripts/run-bazel-rbe.sh test //:pytest
+
+bazel-check: requirements-lock bazel-format bazel-mod-tidy bazel-test
 
 clean:
 	rm -rf build/
