@@ -65,6 +65,42 @@ def test_config_validation_retry():
     assert config.retry_attempts == 0
 
 
+def test_config_validation_retry_backoff():
+    """Test retry_backoff validation"""
+    with pytest.raises(ValueError, match="retry_backoff must be positive"):
+        HarnessConfig(retry_backoff=0)
+
+    with pytest.raises(ValueError, match="retry_backoff must be positive"):
+        HarnessConfig(retry_backoff=-1)
+
+
+def test_config_validation_max_output_tokens():
+    """Test max_output_tokens validation"""
+    with pytest.raises(ValueError, match="max_output_tokens must be positive"):
+        HarnessConfig(max_output_tokens=0)
+
+    with pytest.raises(ValueError, match="max_output_tokens must be positive"):
+        HarnessConfig(max_output_tokens=-1)
+
+    config = HarnessConfig(max_output_tokens=1)
+    assert config.max_output_tokens == 1
+
+
+def test_config_validation_top_p():
+    """Test top_p validation"""
+    with pytest.raises(ValueError, match="top_p must be between"):
+        HarnessConfig(top_p=-0.1)
+
+    with pytest.raises(ValueError, match="top_p must be between"):
+        HarnessConfig(top_p=1.1)
+
+    config = HarnessConfig(top_p=0.0)
+    assert config.top_p == 0.0
+
+    config = HarnessConfig(top_p=1.0)
+    assert config.top_p == 1.0
+
+
 def test_config_custom_request_id():
     """Test custom request_id"""
     config = HarnessConfig(request_id="custom-id-123")

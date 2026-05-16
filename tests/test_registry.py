@@ -1,7 +1,8 @@
 """Tests for ToolRegistry"""
 
 import asyncio
-from typing import Optional
+import sys
+from typing import Literal, Optional
 
 import pytest
 
@@ -22,6 +23,28 @@ def test_python_type_to_json_schema_optional():
     """Test Optional type handling"""
     schema = python_type_to_json_schema(Optional[str])
     assert schema == {"type": "string"}
+
+
+def test_python_type_to_json_schema_pep604_optional():
+    """Test Python 3.10 union syntax handling"""
+    if sys.version_info < (3, 10):
+        pytest.skip("PEP 604 union syntax requires Python 3.10+")
+    schema = python_type_to_json_schema(str | None)
+    assert schema == {"type": "string"}
+
+
+def test_python_type_to_json_schema_union():
+    """Test multiple non-null union types"""
+    if sys.version_info < (3, 10):
+        pytest.skip("PEP 604 union syntax requires Python 3.10+")
+    schema = python_type_to_json_schema(str | int)
+    assert schema == {"anyOf": [{"type": "string"}, {"type": "integer"}]}
+
+
+def test_python_type_to_json_schema_literal():
+    """Test Literal enum generation"""
+    schema = python_type_to_json_schema(Literal["fast", "safe"])
+    assert schema == {"type": "string", "enum": ["fast", "safe"]}
 
 
 def test_python_type_to_json_schema_list():
@@ -131,6 +154,17 @@ def test_registry_clear():
 
     registry.clear()
     assert len(registry.get_all()) == 0
+
+
+def test_registry_get_all_returns_copy():
+    """Test get_all returns a copy, not the backing registry"""
+    registry = ToolRegistry()
+
+    registry.register("sample", "Sample", lambda x: x)
+    tools = registry.get_all()
+    tools.clear()
+
+    assert registry.get("sample") is not None
 
 
 def test_registry_thread_safety():
