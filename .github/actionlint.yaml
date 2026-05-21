@@ -1,5 +1,4 @@
 self-hosted-runner:
   labels:
-    - blacksmith-4vcpu-ubuntu-2404
     - evalops-agent-harness-rbe
     - bazel-rbe
